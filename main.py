@@ -359,6 +359,11 @@ with tabs[2]:
         # Fusion complète
         initial_clients_df = pd.concat([from_gsheet, from_csv, from_orders], ignore_index=True)
 
+        # Normaliser et forcer customer_id à string
+        initial_clients_df["customer_id"] = initial_clients_df["customer_id"].astype(str).str.strip()
+        initial_clients_df["customer_id"] = initial_clients_df["customer_id"].replace({"": None, "nan": None})
+
+
         # Supprimer les colonnes en double (_x/_y)
         initial_clients_df = initial_clients_df.loc[:, ~initial_clients_df.columns.duplicated()]
 
