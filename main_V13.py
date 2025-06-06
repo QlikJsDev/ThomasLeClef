@@ -10,39 +10,24 @@ import csv
 st.set_page_config(page_title="Commandes Shopify enrichies", layout="wide")
 st.title("🍭️ Gestion des commandes Shopify")
 
-
 # === Paramètres ===
 params = {}
 with open("param.txt", "r") as f:
     exec(f.read(), params)
 
 SHOPIFY_DOMAIN = params["SHOPIFY_DOMAIN"]
-# ACCESS_TOKEN = params["ACCESS_TOKEN"]
-ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
+ACCESS_TOKEN = params["ACCESS_TOKEN"]
+CUSTOMER_PATH = params["CUSTOMER_PATH"]
 API_VERSION = "2025-01"
 
+# === Précharger données globales ===
+clients_info = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame()
+noms_clients = sorted(clients_info["Nom"].dropna().unique()) if "Nom" in clients_info.columns else []
+sources = ["web", "non web"]
 
-sheet_id = "1YLWvm-ay-vgPP2rIDQNplrRKUciyGzudWPgO2fVAC_I"
-sheet_name = "Clients"  # Le nom de l’onglet
-url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
-
-clients_df = pd.read_csv(url)
-client_df = clients_df.copy()
-
-# Normalisation des noms de colonnes du Google Sheet
-clients_df.rename(columns={
-    "Email": "email",
-    "Created_at": "created_at",
-    "Updated_at": "updated_at",
-    "Prénom": "prenom",
-    "Nom": "Nom",
-    "Telephone": "telephone",
-    "Adresse": "adresse",
-    "Ville": "ville"
-}, inplace=True)
-
-
-
+plats_disponibles = []
+if os.path.exists("commandes.csv"):
+    plats_disponibles = sorted(pd.read_csv("commandes.csv")["Plat"].dropna().unique())
 
 # === Fonctions ===
 def read_csv_flexible_encoding(file_path):
@@ -109,6 +94,61 @@ def get_products_and_prices():
 
 
 
+def load_all_clients(path):
+    today = datetime.today().date()
+    clients = []
+    for file in os.listdir(path):
+        full_path = os.path.join(path, file)
+        if file.endswith(".csv") and datetime.fromtimestamp(os.path.getmtime(full_path)).date() == today:
+            try:
+                with open(full_path, "r", encoding="utf-8") as f:
+                    fields = f.readline().strip().split(";")
+                    if len(fields) >= 8:
+                        clients.append({
+                            "Nom": f"{fields[3]} {fields[4]}",
+                            "email": fields[0],
+                            "telephone": fields[5],
+                            "adresse": fields[6],
+                            "ville": fields[7],
+                            "Itinéraire": ""
+                        })
+            except Exception as e:
+                st.warning(f"Erreur lecture {file} : {e}")
+    return pd.DataFrame(clients)
+
+def get_client_details(customer_ids, path=CUSTOMER_PATH):
+    def read_csv_flexible_encoding(file_path):
+        encodings = ["utf-8", "utf-8-sig", "latin1"]
+        for enc in encodings:
+            try:
+                with open(file_path, "r", encoding=enc) as f:
+                    return f.readline().strip().split(";")
+            except Exception:
+                continue
+        return None
+
+    client_data = []
+    for cid in customer_ids:
+        file_path = os.path.join(path, f"{cid}.csv")
+        if os.path.exists(file_path):
+            fields = read_csv_flexible_encoding(file_path)
+            if fields and len(fields) >= 8:
+                client_data.append({
+                    "customer_id": cid,
+                    "email": fields[0],
+                    "Nom": f"{fields[3]} {fields[4]}",
+                    "telephone": fields[5],
+                    "adresse": fields[6],
+                    "ville": fields[7]
+                })
+            else:
+                st.warning(f"⚠️ Client {cid} ignoré : fichier vide, invalide ou mal encodé.")
+        else:
+            st.warning(f"⚠️ Fichier client {cid}.csv introuvable.")
+    return pd.DataFrame(client_data)
+
+
+
 @st.cache_data(show_spinner="Chargement des commandes depuis Shopify...")
 def get_shopify_orders():
     url = f"https://{SHOPIFY_DOMAIN}/admin/api/{API_VERSION}/orders.json?status=any&limit=250"
@@ -151,26 +191,6 @@ def extract_date_from_name(name):
         except:
             return None
     return None
-
-
-# === Précharger données globales ===
-clients_info = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Clients")
-noms_from_csv = sorted(clients_info["Nom"].dropna().unique()) if "Nom" in clients_info.columns else []
-
-# Ajouter les noms extraits dynamiquement via get_client_details
-orders_df = get_shopify_orders()
-client_df = clients_df.copy()
-noms_from_dynamic = sorted(client_df["Nom"].dropna().unique()) if not client_df.empty else []
-
-# Fusion sans doublons
-noms_clients = sorted(set(noms_from_csv + noms_from_dynamic))
-
-sources = ["web", "non web"]
-
-plats_disponibles = []
-if os.path.exists("commandes.csv"):
-    plats_disponibles = sorted(pd.read_csv("commandes.csv")["Plat"].dropna().unique())
-
 
 # === Interface principale ===
 if not os.path.exists("produits_prices.csv"):
@@ -219,32 +239,16 @@ with tabs[0]:
             (orders_df["date_livraison"] >= start_week)
         ]
 
-        orders_df["customer_id"] = pd.to_numeric(orders_df["customer_id"], errors="coerce").astype("Int64")
-        client_df["customer_id"] = pd.to_numeric(client_df["customer_id"], errors="coerce").astype("Int64")
-
-
-        # Fusionner avec les infos clients
-        full_df = orders_df.merge(client_df, on="customer_id", how="left")
-
-        # ✅ Sauvegarder les infos enrichies dans commandes.csv
-        save_df = full_df[["order_number", "Plat", "customer_id", "Nom", "quantity", "source_name", "note"]]
+        # ✅ Sauvegarder toutes les commandes récupérées dans commandes.csv
+        save_df = orders_df[["order_number", "Plat", "customer_id", "quantity", "source_name", "note"]]
         save_df.to_csv("commandes.csv", index=False, quoting=csv.QUOTE_NONNUMERIC)
 
-
         # Maintenant affichage
-        client_df = clients_df.copy()
-
-
-        # 🛠 Correction : assurer que les types sont bien des int
-        orders_df["customer_id"] = pd.to_numeric(orders_df["customer_id"], errors="coerce").astype("Int64")
-        client_df["customer_id"] = pd.to_numeric(client_df["customer_id"], errors="coerce").astype("Int64")
+        client_df = pd.DataFrame()
+        if not orders_df["customer_id"].dropna().empty:
+            client_df = get_client_details(orders_df["customer_id"].dropna().unique())
 
         full_df = orders_df.merge(client_df, on="customer_id", how="left")
-
-
-        full_df = orders_df.merge(client_df, on="customer_id", how="left")
-
-
 
         shopify_display = full_df[["order_number", "Plat", "Nom", "quantity", "source_name", "note"]]
         edited_shopify = st.data_editor(
@@ -322,38 +326,15 @@ with tabs[1]:
 
 with tabs[2]:
     st.header("👥 Informations clients")
-    colonnes_clients = ["customer_id", "Nom", "email", "telephone", "adresse", "ville", "Itinéraire"]
-
+    colonnes_clients = ["Nom", "email", "telephone", "adresse", "ville", "Itinéraire"]
 
     # 🔥 Initialisation : charger dans st.session_state
     if "clients_df" not in st.session_state:
-        sheet_id = "1YLWvm-ay-vgPP2rIDQNplrRKUciyGzudWPgO2fVAC_I"
-        sheet_name = "Clients"
-        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
-
-        try:
-            from_gsheet = pd.read_csv(url)
-        except Exception as e:
-            st.warning(f"❌ Erreur chargement Google Sheet : {e}")
-            from_gsheet = pd.DataFrame()
-
-        from_csv = pd.read_csv("Clients.csv", dtype={"customer_id": "string"}) if os.path.exists("Clients.csv") else pd.DataFrame(columns=colonnes_clients)
-
-
-        # 🆕 Récupérer les clients actifs depuis les commandes Shopify
-        orders_df = pd.read_csv("commandes.csv") if os.path.exists("commandes.csv") else pd.DataFrame()
-        customer_ids = orders_df["customer_id"].dropna().unique() if "customer_id" in orders_df.columns else []
-        from_orders = clients_df[clients_df["customer_id"].isin(customer_ids)]
-
-
-        # Fusionner toutes les sources
-        initial_clients_df = pd.concat([from_gsheet, from_csv, from_orders], ignore_index=True)
-        # Préserver les lignes les plus complètes (ayant un customer_id)
-        initial_clients_df.sort_values(by="Nom", na_position="last", inplace=True)
-        initial_clients_df = initial_clients_df.drop_duplicates(subset="Nom", keep="first")
-
+        from_path = load_all_clients(CUSTOMER_PATH)
+        from_csv = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame(columns=colonnes_clients)
+        initial_clients_df = pd.concat([from_csv, from_path], ignore_index=True)
+        initial_clients_df = initial_clients_df.drop_duplicates(subset="Nom", keep="last")
         st.session_state["clients_df"] = initial_clients_df
-
 
     # 🔥 Edition en live
     edited_clients = st.data_editor(
@@ -362,11 +343,9 @@ with tabs[2]:
         use_container_width=True,
         column_config={
             "Nom": st.column_config.TextColumn("Nom", required=True),
-            "Itinéraire": st.column_config.SelectboxColumn("Itinéraire", options=[str(i) for i in range(1, 6)]),
-            "customer_id": st.column_config.TextColumn("customer_id", disabled=True)
+            "Itinéraire": st.column_config.SelectboxColumn("Itinéraire", options=[str(i) for i in range(1, 6)])
         }
     )
-
 
     # 🔥 Stockage de l'édition en session_state pour garder en mémoire
     st.session_state["clients_df"] = edited_clients
