@@ -363,6 +363,9 @@ with tabs[2]:
         customer_ids = orders_df["customer_id"].dropna().unique() if "customer_id" in orders_df.columns else []
         from_orders = get_client_details(customer_ids)
 
+        st.write("📋 Colonnes orders_df :", orders_df.columns.tolist())
+        st.write("📋 Colonnes client_df :", client_df.columns.tolist())
+
         # Fusionner toutes les sources
         initial_clients_df = pd.concat([from_gsheet, from_csv, from_orders], ignore_index=True)
         # Préserver les lignes les plus complètes (ayant un customer_id)
