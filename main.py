@@ -240,6 +240,9 @@ with tabs[0]:
             (orders_df["date_livraison"] >= start_week)
         ]
 
+        st.write("📋 Colonnes orders_df :", orders_df.columns.tolist())
+        st.write("📋 Colonnes client_df :", client_df.columns.tolist())
+
         # Fusionner avec les infos clients
         full_df = orders_df.merge(client_df, on="customer_id", how="left")
 
@@ -362,9 +365,6 @@ with tabs[2]:
         orders_df = pd.read_csv("commandes.csv") if os.path.exists("commandes.csv") else pd.DataFrame()
         customer_ids = orders_df["customer_id"].dropna().unique() if "customer_id" in orders_df.columns else []
         from_orders = get_client_details(customer_ids)
-
-        st.write("📋 Colonnes orders_df :", orders_df.columns.tolist())
-        st.write("📋 Colonnes client_df :", client_df.columns.tolist())
 
         # Fusionner toutes les sources
         initial_clients_df = pd.concat([from_gsheet, from_csv, from_orders], ignore_index=True)
