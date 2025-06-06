@@ -254,6 +254,7 @@ with tabs[0]:
         # Maintenant affichage
         client_df = pd.DataFrame()
         if not orders_df["customer_id"].dropna().empty:
+            st.write("🧾 Liste des customer_id à chercher :", orders_df["customer_id"].dropna().unique())
             client_df = get_client_details(orders_df["customer_id"].dropna().unique())
 
             # 🛠 Correction : assurer que les types sont bien des int
