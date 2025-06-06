@@ -1,0 +1,20 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+# Ignore l'environnement virtuel
+env/
+venv/
+Lib/
+Scripts/
+
+# Fichiers Python inutiles
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore fichiers système
+.DS_Store
+Thumbs.db
+
+# Autorise tes fichiers du projet
+!*.py
+!requirements.txt
