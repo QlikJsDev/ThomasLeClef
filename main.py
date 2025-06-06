@@ -331,26 +331,43 @@ with tabs[2]:
 
         try:
             from_gsheet = pd.read_csv(url)
+            from_gsheet.columns = [col.lower() for col in from_gsheet.columns]
         except Exception as e:
             st.warning(f"❌ Erreur chargement Google Sheet : {e}")
             from_gsheet = pd.DataFrame()
 
-        from_csv = pd.read_csv("Clients.csv", dtype={"customer_id": "string"}) if os.path.exists("Clients.csv") else pd.DataFrame(columns=colonnes_clients)
+        from_csv = pd.read_csv("Clients.csv", dtype={"customer_id": "string"}) if os.path.exists("Clients.csv") else pd.DataFrame()
+        from_csv.columns = [col.lower() for col in from_csv.columns]
 
+        # 🛠 Merge les colonnes prénom + nom si présentes
+        def build_nom_complet(df):
+            if "prénom" in df.columns and "nom" in df.columns:
+                df["nom"] = df["prénom"].fillna("") + " " + df["nom"].fillna("")
+                df["nom"] = df["nom"].str.strip()
+            return df.drop(columns=["prénom"], errors="ignore")
 
-        # 🆕 Récupérer les clients actifs depuis les commandes Shopify
+        from_gsheet = build_nom_complet(from_gsheet)
+        from_csv = build_nom_complet(from_csv)
+
+        # 🆕 Récupérer clients actifs des commandes
         orders_df = pd.read_csv("commandes.csv") if os.path.exists("commandes.csv") else pd.DataFrame()
         customer_ids = orders_df["customer_id"].dropna().unique() if "customer_id" in orders_df.columns else []
-        from_orders = clients_df[clients_df["customer_id"].isin(customer_ids)]
+        from_orders = clients_df[clients_df["customer_id"].isin(customer_ids)] if "customer_id" in clients_df.columns else pd.DataFrame()
+        from_orders.columns = [col.lower() for col in from_orders.columns]
+        from_orders = build_nom_complet(from_orders)
 
-
-        # Fusionner toutes les sources
+        # Fusion complète
         initial_clients_df = pd.concat([from_gsheet, from_csv, from_orders], ignore_index=True)
-        # Préserver les lignes les plus complètes (ayant un customer_id)
+
+        # Supprimer les colonnes en double (_x/_y)
+        initial_clients_df = initial_clients_df.loc[:, ~initial_clients_df.columns.duplicated()]
+
+        # Supprimer doublons sur nom
         initial_clients_df.sort_values(by="nom", na_position="last", inplace=True)
         initial_clients_df = initial_clients_df.drop_duplicates(subset="nom", keep="first")
 
         st.session_state["clients_df"] = initial_clients_df
+
 
 
     # 🔥 Edition en live
