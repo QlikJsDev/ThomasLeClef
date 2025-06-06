@@ -146,7 +146,6 @@ noms_from_csv = sorted(clients_info["Nom"].dropna().unique()) if "Nom" in client
 
 # Ajouter les noms extraits dynamiquement via get_client_details
 orders_df = get_shopify_orders()
-st.write("🧾 Liste des customer_id à chercher :", orders_df["customer_id"].dropna().unique())
 client_df = clients_df.copy()
 noms_from_dynamic = sorted(client_df["Nom"].dropna().unique()) if not client_df.empty else []
 
