@@ -180,6 +180,7 @@ noms_from_csv = sorted(clients_info["Nom"].dropna().unique()) if "Nom" in client
 
 # Ajouter les noms extraits dynamiquement via get_client_details
 orders_df = get_shopify_orders()
+st.write("🧾 Liste des customer_id à chercher :", orders_df["customer_id"].dropna().unique())
 client_df = get_client_details(orders_df["customer_id"].dropna().unique())
 noms_from_dynamic = sorted(client_df["Nom"].dropna().unique()) if not client_df.empty else []
 
@@ -254,7 +255,6 @@ with tabs[0]:
         # Maintenant affichage
         client_df = pd.DataFrame()
         if not orders_df["customer_id"].dropna().empty:
-            st.write("🧾 Liste des customer_id à chercher :", orders_df["customer_id"].dropna().unique())
             client_df = get_client_details(orders_df["customer_id"].dropna().unique())
 
             # 🛠 Correction : assurer que les types sont bien des int
