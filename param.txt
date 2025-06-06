@@ -1,3 +1,2 @@
 SHOPIFY_DOMAIN = "2c3fd5-e6.myshopify.com"
-ACCESS_TOKEN = "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"
 CUSTOMER_PATH = "C:\\Users\\MGE\\OneDrive\\Documents\\Qlik Clef"
