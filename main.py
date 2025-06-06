@@ -27,25 +27,16 @@ sheet_name = "Clients"  # Le nom de l’onglet
 url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
 
 clients_df = pd.read_csv(url)
+
+# Forcer les noms de colonnes en minuscules
 clients_df.columns = [col.lower() for col in clients_df.columns]
 
-# Normalisation des noms de colonnes du Google Sheet
-clients_df.rename(columns={
-    "email": "email",
-    "Created_at": "created_at",
-    "Updated_at": "updated_at",
-    "prénom": "prenom",
-    "nom": "nom",
-    "telephone": "telephone",
-    "adresse": "adresse",
-    "ville": "ville"
-}, inplace=True)
+# Fusionner prénom + nom pour créer un nom complet (dans 'nom')
+if "prénom" in clients_df.columns and "nom" in clients_df.columns:
+    clients_df["nom"] = clients_df["prénom"].fillna("") + " " + clients_df["nom"].fillna("")
+    clients_df["nom"] = clients_df["nom"].str.strip()
+    clients_df.drop(columns=["prénom"], inplace=True)  # optionnel
 
-
-clients_df["nom"] = clients_df.get("prenom", "").fillna("") + " " + clients_df.get("nom", "").fillna("")
-clients_df["nom"] = clients_df["nom"].str.strip()
-
-client_df = clients_df.copy()
 
 
 
@@ -395,9 +386,12 @@ with tabs[3]:
 
     clients_info = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame()
     clients_info.columns = [col.lower() for col in clients_info.columns]
-    if "prenom" in clients_info.columns and "nom" in clients_info.columns:
-        clients_info["Nom"] = clients_info["prenom"].fillna("") + " " + clients_info["nom"].fillna("")
-        clients_info["Nom"] = clients_info["Nom"].str.strip()
+
+    if "prénom" in clients_info.columns and "nom" in clients_info.columns:
+        clients_info["nom"] = clients_info["prénom"].fillna("") + " " + clients_info["nom"].fillna("")
+        clients_info["nom"] = clients_info["nom"].str.strip()
+        clients_info.drop(columns=["prénom"], inplace=True)
+
 
 
     produits_prices = pd.read_csv("produits_prices.csv") if os.path.exists("produits_prices.csv") else pd.DataFrame()
