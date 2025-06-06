@@ -394,6 +394,10 @@ with tabs[3]:
     df_all = pd.concat([df1, df2], ignore_index=True)
 
     clients_info = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame()
+    clients_info.columns = [col.lower() for col in clients_info.columns]
+    clients_info["nom"] = clients_info.get("prenom", "").fillna("") + " " + clients_info.get("nom", "").fillna("")
+    clients_info["nom"] = clients_info["nom"].str.strip()
+
     produits_prices = pd.read_csv("produits_prices.csv") if os.path.exists("produits_prices.csv") else pd.DataFrame()
 
     final_df = df_all.merge(clients_info, on="nom", how="left")
