@@ -1,0 +1,2 @@
+SHOPIFY_DOMAIN = "2c3fd5-e6.myshopify.com"
+CUSTOMER_PATH = "C:\\Users\\MGE\\OneDrive\\Documents\\Qlik Clef"
