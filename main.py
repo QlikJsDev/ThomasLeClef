@@ -29,22 +29,24 @@ url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sh
 clients_df = pd.read_csv(url)
 clients_df.columns = [col.lower() for col in clients_df.columns]
 
-clients_df["nom"] = clients_df.get("prenom", "").fillna("") + " " + clients_df.get("nom", "").fillna("")
-clients_df["nom"] = clients_df["nom"].str.strip()
-
-client_df = clients_df.copy()
-
 # Normalisation des noms de colonnes du Google Sheet
 clients_df.rename(columns={
     "email": "email",
     "Created_at": "created_at",
     "Updated_at": "updated_at",
-    "prenom": "prenom",
+    "prénom": "prenom",
     "nom": "nom",
     "telephone": "telephone",
     "adresse": "adresse",
     "ville": "ville"
 }, inplace=True)
+
+
+clients_df["nom"] = clients_df.get("prenom", "").fillna("") + " " + clients_df.get("nom", "").fillna("")
+clients_df["nom"] = clients_df["nom"].str.strip()
+
+client_df = clients_df.copy()
+
 
 
 
