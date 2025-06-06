@@ -22,6 +22,7 @@ ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
 CUSTOMER_PATH = params["CUSTOMER_PATH"]
 API_VERSION = "2025-01"
 
+st.write('Access Token : '+ACCESS_TOKEN)
 
 # === Fonctions ===
 def read_csv_flexible_encoding(file_path):
