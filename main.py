@@ -17,12 +17,19 @@ with open("param.txt", "r") as f:
     exec(f.read(), params)
 
 SHOPIFY_DOMAIN = params["SHOPIFY_DOMAIN"]
-# ACCESS_TOKEN = params["ACCESS_TOKEN"]
-ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
+ACCESS_TOKEN = params["ACCESS_TOKEN"]
+# ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
 CUSTOMER_PATH = params["CUSTOMER_PATH"]
 API_VERSION = "2025-01"
 
-st.write('Access Token : '+ACCESS_TOKEN)
+
+sheet_id = "1YLWvm-ay-vgPP2rIDQNplrRKUciyGzudWPgO2fVAC_I"
+sheet_name = "Clients"  # Le nom de l’onglet
+url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+
+clients_df = pd.read_csv(url, sep=",")
+
+
 
 # === Fonctions ===
 def read_csv_flexible_encoding(file_path):
@@ -191,7 +198,7 @@ def extract_date_from_name(name):
 
 
 # === Précharger données globales ===
-clients_info = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame()
+clients_info = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Clients")
 noms_from_csv = sorted(clients_info["Nom"].dropna().unique()) if "Nom" in clients_info.columns else []
 
 # Ajouter les noms extraits dynamiquement via get_client_details
@@ -255,9 +262,6 @@ with tabs[0]:
             (orders_df["date_livraison"].notnull()) &
             (orders_df["date_livraison"] >= start_week)
         ]
-
-        st.write("🧪 Colonnes orders_df :", orders_df.columns.tolist())
-        st.write("🧪 Colonnes client_df :", client_df.columns.tolist())
 
         # Fusionner avec les infos clients
         full_df = orders_df.merge(client_df, on="customer_id", how="left")
