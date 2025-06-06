@@ -395,8 +395,10 @@ with tabs[3]:
 
     clients_info = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame()
     clients_info.columns = [col.lower() for col in clients_info.columns]
-    clients_info["nom"] = clients_info.get("prenom", "").fillna("") + " " + clients_info.get("nom", "").fillna("")
-    clients_info["nom"] = clients_info["nom"].str.strip()
+    if "prenom" in clients_info.columns and "nom" in clients_info.columns:
+        clients_info["Nom"] = clients_info["prenom"].fillna("") + " " + clients_info["nom"].fillna("")
+        clients_info["Nom"] = clients_info["Nom"].str.strip()
+
 
     produits_prices = pd.read_csv("produits_prices.csv") if os.path.exists("produits_prices.csv") else pd.DataFrame()
 
