@@ -19,7 +19,6 @@ with open("param.txt", "r") as f:
 SHOPIFY_DOMAIN = params["SHOPIFY_DOMAIN"]
 # ACCESS_TOKEN = params["ACCESS_TOKEN"]
 ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
-CUSTOMER_PATH = params["CUSTOMER_PATH"]
 API_VERSION = "2025-01"
 
 
@@ -27,7 +26,8 @@ sheet_id = "1YLWvm-ay-vgPP2rIDQNplrRKUciyGzudWPgO2fVAC_I"
 sheet_name = "Clients"  # Le nom de l’onglet
 url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
 
-clients_df = pd.read_csv(url, sep=",")
+clients_df = pd.read_csv(url)
+client_df = clients_df.copy()
 
 
 
@@ -96,40 +96,6 @@ def get_products_and_prices():
 
 
 
-def get_client_details(customer_ids, path=CUSTOMER_PATH):
-    def read_csv_flexible_encoding(file_path):
-        encodings = ["utf-8", "utf-8-sig", "latin1"]
-        for enc in encodings:
-            try:
-                with open(file_path, "r", encoding=enc) as f:
-                    return f.readline().strip().split(";"), enc
-            except Exception:
-                continue
-        return None, None
-
-    client_data = []
-    for cid in customer_ids:
-        file_path = os.path.join(path, f"{cid}.csv")
-        if os.path.exists(file_path):
-            fields, used_encoding = read_csv_flexible_encoding(file_path)
-            if fields and len(fields) >= 8:
-                nom_complet = f"{fields[3]} {fields[4]}"
-                client_data.append({
-                    "customer_id": cid,
-                    "email": fields[0],
-                    "Nom": nom_complet,
-                    "telephone": fields[5],
-                    "adresse": fields[6],
-                    "ville": fields[7]
-                })
-            else:
-                print(f"⚠️ Client {cid} ignoré : fichier mal formé ou vide.")
-                st.warning(f"⚠️ Client {cid} ignoré : fichier mal formé ou vide.")
-        else:
-            print(f"❌ Fichier client {cid}.csv introuvable.")
-    return pd.DataFrame(client_data)
-
-
 @st.cache_data(show_spinner="Chargement des commandes depuis Shopify...")
 def get_shopify_orders():
     url = f"https://{SHOPIFY_DOMAIN}/admin/api/{API_VERSION}/orders.json?status=any&limit=250"
@@ -181,7 +147,7 @@ noms_from_csv = sorted(clients_info["Nom"].dropna().unique()) if "Nom" in client
 # Ajouter les noms extraits dynamiquement via get_client_details
 orders_df = get_shopify_orders()
 st.write("🧾 Liste des customer_id à chercher :", orders_df["customer_id"].dropna().unique())
-client_df = get_client_details(orders_df["customer_id"].dropna().unique())
+client_df = clients_df.copy()
 noms_from_dynamic = sorted(client_df["Nom"].dropna().unique()) if not client_df.empty else []
 
 # Fusion sans doublons
@@ -241,8 +207,9 @@ with tabs[0]:
             (orders_df["date_livraison"] >= start_week)
         ]
 
-        st.write("📋 Colonnes orders_df :", orders_df.columns.tolist())
-        st.write("📋 Colonnes client_df :", client_df.columns.tolist())
+        orders_df["customer_id"] = pd.to_numeric(orders_df["customer_id"], errors="coerce").astype("Int64")
+        client_df["customer_id"] = pd.to_numeric(client_df["customer_id"], errors="coerce").astype("Int64")
+
 
         # Fusionner avec les infos clients
         full_df = orders_df.merge(client_df, on="customer_id", how="left")
@@ -253,15 +220,14 @@ with tabs[0]:
 
 
         # Maintenant affichage
-        client_df = pd.DataFrame()
-        if not orders_df["customer_id"].dropna().empty:
-            client_df = get_client_details(orders_df["customer_id"].dropna().unique())
+        client_df = clients_df.copy()
 
-            # 🛠 Correction : assurer que les types sont bien des int
-            orders_df["customer_id"] = pd.to_numeric(orders_df["customer_id"], errors="coerce").astype("Int64")
-            client_df["customer_id"] = pd.to_numeric(client_df["customer_id"], errors="coerce").astype("Int64")
 
-            full_df = orders_df.merge(client_df, on="customer_id", how="left")
+        # 🛠 Correction : assurer que les types sont bien des int
+        orders_df["customer_id"] = pd.to_numeric(orders_df["customer_id"], errors="coerce").astype("Int64")
+        client_df["customer_id"] = pd.to_numeric(client_df["customer_id"], errors="coerce").astype("Int64")
+
+        full_df = orders_df.merge(client_df, on="customer_id", how="left")
 
 
         full_df = orders_df.merge(client_df, on="customer_id", how="left")
@@ -365,7 +331,8 @@ with tabs[2]:
         # 🆕 Récupérer les clients actifs depuis les commandes Shopify
         orders_df = pd.read_csv("commandes.csv") if os.path.exists("commandes.csv") else pd.DataFrame()
         customer_ids = orders_df["customer_id"].dropna().unique() if "customer_id" in orders_df.columns else []
-        from_orders = get_client_details(customer_ids)
+        from_orders = clients_df[clients_df["customer_id"].isin(customer_ids)]
+
 
         # Fusionner toutes les sources
         initial_clients_df = pd.concat([from_gsheet, from_csv, from_orders], ignore_index=True)
