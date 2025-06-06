@@ -256,6 +256,9 @@ with tabs[0]:
             (orders_df["date_livraison"] >= start_week)
         ]
 
+        st.write("🧪 Colonnes orders_df :", orders_df.columns.tolist())
+        st.write("🧪 Colonnes client_df :", client_df.columns.tolist())
+
         # Fusionner avec les infos clients
         full_df = orders_df.merge(client_df, on="customer_id", how="left")
 
