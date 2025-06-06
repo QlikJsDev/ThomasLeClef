@@ -96,29 +96,6 @@ def get_products_and_prices():
 
 
 
-def load_all_clients(path):
-    today = datetime.today().date()
-    clients = []
-    for file in os.listdir(path):
-        full_path = os.path.join(path, file)
-        if file.endswith(".csv") and datetime.fromtimestamp(os.path.getmtime(full_path)).date() == today:
-            try:
-                with open(full_path, "r", encoding="utf-8") as f:
-                    fields = f.readline().strip().split(";")
-                    if len(fields) >= 8:
-                        clients.append({
-                            "Nom": f"{fields[3]} {fields[4]}",
-                            "email": fields[0],
-                            "telephone": fields[5],
-                            "adresse": fields[6],
-                            "ville": fields[7],
-                            "Itinéraire": ""
-                        })
-            except Exception as e:
-                st.warning(f"Erreur lecture {file} : {e}")
-    return pd.DataFrame(clients)
-
-
 def get_client_details(customer_ids, path=CUSTOMER_PATH):
     def read_csv_flexible_encoding(file_path):
         encodings = ["utf-8", "utf-8-sig", "latin1"]
@@ -368,7 +345,16 @@ with tabs[2]:
 
     # 🔥 Initialisation : charger dans st.session_state
     if "clients_df" not in st.session_state:
-        from_path = load_all_clients(CUSTOMER_PATH)
+        sheet_id = "1YLWvm-ay-vgPP2rIDQNplrRKUciyGzudWPgO2fVAC_I"
+        sheet_name = "Clients"
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+
+        try:
+            from_gsheet = pd.read_csv(url)
+        except Exception as e:
+            st.warning(f"❌ Erreur chargement Google Sheet : {e}")
+            from_gsheet = pd.DataFrame()
+
         from_csv = pd.read_csv("Clients.csv", dtype={"customer_id": "string"}) if os.path.exists("Clients.csv") else pd.DataFrame(columns=colonnes_clients)
 
 
@@ -378,7 +364,7 @@ with tabs[2]:
         from_orders = get_client_details(customer_ids)
 
         # Fusionner toutes les sources
-        initial_clients_df = pd.concat([from_csv, from_path, from_orders], ignore_index=True)
+        initial_clients_df = pd.concat([from_gsheet, from_csv, from_orders], ignore_index=True)
         # Préserver les lignes les plus complètes (ayant un customer_id)
         initial_clients_df.sort_values(by="Nom", na_position="last", inplace=True)
         initial_clients_df = initial_clients_df.drop_duplicates(subset="Nom", keep="first")
