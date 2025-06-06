@@ -17,7 +17,8 @@ with open("param.txt", "r") as f:
     exec(f.read(), params)
 
 SHOPIFY_DOMAIN = params["SHOPIFY_DOMAIN"]
-ACCESS_TOKEN = params["ACCESS_TOKEN"]
+# ACCESS_TOKEN = params["ACCESS_TOKEN"]
+ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
 CUSTOMER_PATH = params["CUSTOMER_PATH"]
 API_VERSION = "2025-01"
 
