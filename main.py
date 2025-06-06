@@ -27,6 +27,8 @@ sheet_name = "Clients"  # Le nom de l’onglet
 url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
 
 clients_df = pd.read_csv(url)
+clients_df["Nom"] = clients_df["prenom"].fillna("") + " " + clients_df["Nom"].fillna("")
+clients_df["Nom"] = clients_df["Nom"].str.strip()
 client_df = clients_df.copy()
 
 # Normalisation des noms de colonnes du Google Sheet
