@@ -27,20 +27,23 @@ sheet_name = "Clients"  # Le nom de l’onglet
 url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
 
 clients_df = pd.read_csv(url)
-clients_df["Nom"] = clients_df["Prénom"].fillna("") + " " + clients_df["Nom"].fillna("")
-clients_df["Nom"] = clients_df["Nom"].str.strip()
+clients_df.columns = [col.lower() for col in clients_df.columns]
+
+clients_df["nom"] = clients_df.get("prenom", "").fillna("") + " " + clients_df.get("nom", "").fillna("")
+clients_df["nom"] = clients_df["nom"].str.strip()
+
 client_df = clients_df.copy()
 
 # Normalisation des noms de colonnes du Google Sheet
 clients_df.rename(columns={
-    "Email": "email",
+    "email": "email",
     "Created_at": "created_at",
     "Updated_at": "updated_at",
-    "Prénom": "prenom",
-    "Nom": "Nom",
-    "Telephone": "telephone",
-    "Adresse": "adresse",
-    "Ville": "ville"
+    "prenom": "prenom",
+    "nom": "nom",
+    "telephone": "telephone",
+    "adresse": "adresse",
+    "ville": "ville"
 }, inplace=True)
 
 
@@ -157,12 +160,12 @@ def extract_date_from_name(name):
 
 # === Précharger données globales ===
 clients_info = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Clients")
-noms_from_csv = sorted(clients_info["Nom"].dropna().unique()) if "Nom" in clients_info.columns else []
+noms_from_csv = sorted(clients_info["nom"].dropna().unique()) if "nom" in clients_info.columns else []
 
 # Ajouter les noms extraits dynamiquement via get_client_details
 orders_df = get_shopify_orders()
 client_df = clients_df.copy()
-noms_from_dynamic = sorted(client_df["Nom"].dropna().unique()) if not client_df.empty else []
+noms_from_dynamic = sorted(client_df["nom"].dropna().unique()) if not client_df.empty else []
 
 # Fusion sans doublons
 noms_clients = sorted(set(noms_from_csv + noms_from_dynamic))
@@ -229,7 +232,7 @@ with tabs[0]:
         full_df = orders_df.merge(client_df, on="customer_id", how="left")
 
         # ✅ Sauvegarder les infos enrichies dans commandes.csv
-        save_df = full_df[["order_number", "Plat", "customer_id", "Nom", "quantity", "source_name", "note"]]
+        save_df = full_df[["order_number", "Plat", "customer_id", "nom", "quantity", "source_name", "note"]]
         save_df.to_csv("commandes.csv", index=False, quoting=csv.QUOTE_NONNUMERIC)
 
 
@@ -248,14 +251,14 @@ with tabs[0]:
 
 
 
-        shopify_display = full_df[["order_number", "Plat", "Nom", "quantity", "source_name", "note"]]
+        shopify_display = full_df[["order_number", "Plat", "nom", "quantity", "source_name", "note"]]
         edited_shopify = st.data_editor(
             shopify_display,
             num_rows="dynamic",
             use_container_width=True,
             column_config={
                 "Plat": st.column_config.SelectboxColumn("Plat", options=plats_disponibles, required=True),
-                "Nom": st.column_config.SelectboxColumn("Nom", options=noms_clients, required=True),
+                "nom": st.column_config.SelectboxColumn("nom", options=noms_clients, required=True),
                 "source_name": st.column_config.SelectboxColumn("Source", options=sources)
             }
         )
@@ -268,11 +271,11 @@ with tabs[0]:
 # === Ajouter des commandes manuellement ===
 with tabs[1]:
     st.header("🔹 Ajouter des commandes manuellement")
-    colonnes = ["order_number", "Plat", "Nom", "quantity", "source_name", "note"]
+    colonnes = ["order_number", "Plat", "nom", "quantity", "source_name", "note"]
     if os.path.exists("commandes_additionnelles.csv"):
         initial_df = pd.read_csv("commandes_additionnelles.csv")
     else:
-        initial_df = pd.DataFrame(columns=["Plat", "Nom", "quantity", "source_name", "note"])
+        initial_df = pd.DataFrame(columns=["Plat", "nom", "quantity", "source_name", "note"])
     # st.success("Initial DF")
     # st.success(initial_df)
     edited_new = st.data_editor(
@@ -281,7 +284,7 @@ with tabs[1]:
         use_container_width=True,
         column_config={
             "Plat": st.column_config.SelectboxColumn("Plat", options=plats_disponibles, required=True),
-            "Nom": st.column_config.SelectboxColumn("Nom", options=noms_clients, required=True),
+            "nom": st.column_config.SelectboxColumn("nom", options=noms_clients, required=True),
             "source_name": st.column_config.SelectboxColumn("Source", options=sources)
         }
     )
@@ -324,7 +327,7 @@ with tabs[1]:
 
 with tabs[2]:
     st.header("👥 Informations clients")
-    colonnes_clients = ["customer_id", "Nom", "email", "telephone", "adresse", "ville", "Itinéraire"]
+    colonnes_clients = ["customer_id", "nom", "email", "telephone", "adresse", "ville", "Itinéraire"]
 
 
     # 🔥 Initialisation : charger dans st.session_state
@@ -351,8 +354,8 @@ with tabs[2]:
         # Fusionner toutes les sources
         initial_clients_df = pd.concat([from_gsheet, from_csv, from_orders], ignore_index=True)
         # Préserver les lignes les plus complètes (ayant un customer_id)
-        initial_clients_df.sort_values(by="Nom", na_position="last", inplace=True)
-        initial_clients_df = initial_clients_df.drop_duplicates(subset="Nom", keep="first")
+        initial_clients_df.sort_values(by="nom", na_position="last", inplace=True)
+        initial_clients_df = initial_clients_df.drop_duplicates(subset="nom", keep="first")
 
         st.session_state["clients_df"] = initial_clients_df
 
@@ -363,7 +366,7 @@ with tabs[2]:
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Nom": st.column_config.TextColumn("Nom", required=True),
+            "nom": st.column_config.TextColumn("nom", required=True),
             "Itinéraire": st.column_config.SelectboxColumn("Itinéraire", options=[str(i) for i in range(1, 6)]),
             "customer_id": st.column_config.TextColumn("customer_id", disabled=True)
         }
@@ -391,7 +394,7 @@ with tabs[3]:
     clients_info = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame()
     produits_prices = pd.read_csv("produits_prices.csv") if os.path.exists("produits_prices.csv") else pd.DataFrame()
 
-    final_df = df_all.merge(clients_info, on="Nom", how="left")
+    final_df = df_all.merge(clients_info, on="nom", how="left")
 
     # Supprimer colonnes inutiles
     final_df.drop(columns=[col for col in final_df.columns if col.lower().startswith("unnamed") or col == "customer_id"], inplace=True, errors="ignore")
@@ -421,7 +424,7 @@ with tabs[3]:
     final_df["total"] = final_df["price"] * final_df["quantity"].fillna(0)
 
     # Réorganiser les colonnes
-    final_order = ["order_number", "Nom", "Plat", "quantity", "price", "total", "source_name", "note", "Itinéraire", "email", "telephone", "adresse", "ville"]
+    final_order = ["order_number", "nom", "Plat", "quantity", "price", "total", "source_name", "note", "Itinéraire", "email", "telephone", "adresse", "ville"]
     final_df = final_df[[col for col in final_order if col in final_df.columns]]
 
     st.dataframe(final_df, use_container_width=True)
@@ -446,14 +449,14 @@ with tabs[4]:
     df_all["quantity"] = pd.to_numeric(df_all["quantity"], errors="coerce").fillna(0)
 
     pivot_df = df_all.pivot_table(
-        index=["order_number", "Nom", "source_name", "note"],
+        index=["order_number", "nom", "source_name", "note"],
         columns="Plat",
         values="quantity",
         aggfunc="sum",
         fill_value=0
     ).reset_index()
 
-    pivot_df["Total commandes"] = pivot_df.drop(columns=["order_number", "Nom", "source_name", "note"]).sum(axis=1)
+    pivot_df["Total commandes"] = pivot_df.drop(columns=["order_number", "nom", "source_name", "note"]).sum(axis=1)
 
     st.dataframe(pivot_df, use_container_width=True)
 
@@ -474,21 +477,21 @@ with tabs[5]:
     df_all["quantity"] = pd.to_numeric(df_all["quantity"], errors="coerce").fillna(0)
 
     pivot_edit = df_all.pivot_table(
-        index=["order_number", "Nom", "source_name", "note"],
+        index=["order_number", "nom", "source_name", "note"],
         columns="Plat",
         values="quantity",
         aggfunc="sum",
         fill_value=0
     ).reset_index()
 
-    plats = [col for col in pivot_edit.columns if col not in ["order_number", "Nom", "source_name", "note"]]
+    plats = [col for col in pivot_edit.columns if col not in ["order_number", "nom", "source_name", "note"]]
 
     edited_pivot = st.data_editor(
         pivot_edit,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Nom": st.column_config.SelectboxColumn("Nom", options=noms_clients, required=True),
+            "nom": st.column_config.SelectboxColumn("nom", options=noms_clients, required=True),
             "source_name": st.column_config.SelectboxColumn("Source", options=sources, required=True),
             **{plat: st.column_config.NumberColumn(plat, min_value=0, step=1) for plat in plats}
         }
@@ -503,7 +506,7 @@ with tabs[5]:
                 if qty > 0:
                     lines.append({
                         "order_number": row.get("order_number", None),
-                        "Nom": row["Nom"],
+                        "nom": row["nom"],
                         "Plat": plat,
                         "quantity": qty,
                         "source_name": row["source_name"],
