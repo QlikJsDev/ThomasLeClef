@@ -12,7 +12,7 @@ st.set_page_config(page_title="Commandes Shopify enrichies", layout="wide")
 
 
 
-mode = "Dev"  # Remplacez cela par 'Prod' pour le mode production
+mode = "Prod"  # Remplacez cela par 'Prod' pour le mode production
 
 if mode == "Prod":
     params = {}
