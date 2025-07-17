@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import csv
 
 st.set_page_config(page_title="Commandes Shopify enrichies", layout="wide")
-st.title("🍭️ Gestion des commandes Shopify")
+# st.title("🍭️ Gestion des commandes Shopify")
 
 # === Paramètres ===
 params = {}
@@ -24,6 +24,8 @@ API_VERSION = "2025-01"
 clients_info = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame()
 noms_clients = sorted(clients_info["Nom"].dropna().unique()) if "Nom" in clients_info.columns else []
 sources = ["web", "non web"]
+
+# print(ACCESS_TOKEN)
 
 plats_disponibles = []
 if os.path.exists("commandes.csv"):

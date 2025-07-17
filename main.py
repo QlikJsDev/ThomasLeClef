@@ -8,39 +8,44 @@ from datetime import datetime, timedelta
 import csv
 
 st.set_page_config(page_title="Commandes Shopify enrichies", layout="wide")
-st.title("🍭️ Gestion des commandes Shopify")
-
-
-# === Paramètres ===
-params = {}
-with open("param.txt", "r") as f:
-    exec(f.read(), params)
-
-SHOPIFY_DOMAIN = params["SHOPIFY_DOMAIN"]
-# ACCESS_TOKEN = params["ACCESS_TOKEN"]
-ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
-API_VERSION = "2025-01"
-
-
-sheet_id = "1YLWvm-ay-vgPP2rIDQNplrRKUciyGzudWPgO2fVAC_I"
-sheet_name = "Clients"  # Le nom de l’onglet
-url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
-
-clients_df = pd.read_csv(url)
-
-# Forcer les noms de colonnes en minuscules
-clients_df.columns = [col.lower() for col in clients_df.columns]
-
-# Fusionner prénom + nom pour créer un nom complet (dans 'nom')
-if "prénom" in clients_df.columns and "nom" in clients_df.columns:
-    clients_df["nom"] = clients_df["prénom"].fillna("") + " " + clients_df["nom"].fillna("")
-    clients_df["nom"] = clients_df["nom"].str.strip()
-    clients_df.drop(columns=["prénom"], inplace=True)  # optionnel
+# st.title("🍭️ Gestion des commandes Shopify")
 
 
 
+mode = "Dev"  # Remplacez cela par 'Prod' pour le mode production
+
+if mode == "Prod":
+    params = {}
+    with open("param.txt", "r") as f:
+        exec(f.read(), params)
+    ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
+    CUSTOMER_PATH = params["CUSTOMER_PATH"]
+    API_VERSION = "2025-01"
+    SHOPIFY_DOMAIN = params["SHOPIFY_DOMAIN"]
+else:
+    params = {}
+    # Chemin vers le fichier param.txt un niveau au-dessus du répertoire actuel
+    file_path = os.path.join(os.path.dirname(__file__), '..', 'param.txt')
+
+    with open(file_path, "r") as f:
+        exec(f.read(), params)
+    ACCESS_TOKEN = params["ACCESS_TOKEN"]
+    CUSTOMER_PATH = params["CUSTOMER_PATH"]
+    API_VERSION = "2025-01"
+    SHOPIFY_DOMAIN = params["SHOPIFY_DOMAIN"]
 
 
+
+# === Précharger données globales ===
+clients_info = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame()
+noms_clients = sorted(clients_info["Nom"].dropna().unique()) if "Nom" in clients_info.columns else []
+sources = ["web", "non web"]
+
+# print(ACCESS_TOKEN)
+
+plats_disponibles = []
+if os.path.exists("commandes.csv"):
+    plats_disponibles = sorted(pd.read_csv("commandes.csv")["Plat"].dropna().unique())
 
 # === Fonctions ===
 def read_csv_flexible_encoding(file_path):
@@ -107,6 +112,61 @@ def get_products_and_prices():
 
 
 
+def load_all_clients(path):
+    today = datetime.today().date()
+    clients = []
+    for file in os.listdir(path):
+        full_path = os.path.join(path, file)
+        if file.endswith(".csv") and datetime.fromtimestamp(os.path.getmtime(full_path)).date() == today:
+            try:
+                with open(full_path, "r", encoding="utf-8") as f:
+                    fields = f.readline().strip().split(";")
+                    if len(fields) >= 8:
+                        clients.append({
+                            "Nom": f"{fields[3]} {fields[4]}",
+                            "email": fields[0],
+                            "telephone": fields[5],
+                            "adresse": fields[6],
+                            "ville": fields[7],
+                            "Itinéraire": ""
+                        })
+            except Exception as e:
+                st.warning(f"Erreur lecture {file} : {e}")
+    return pd.DataFrame(clients)
+
+def get_client_details(customer_ids, path=CUSTOMER_PATH):
+    def read_csv_flexible_encoding(file_path):
+        encodings = ["utf-8", "utf-8-sig", "latin1"]
+        for enc in encodings:
+            try:
+                with open(file_path, "r", encoding=enc) as f:
+                    return f.readline().strip().split(";")
+            except Exception:
+                continue
+        return None
+
+    client_data = []
+    for cid in customer_ids:
+        file_path = os.path.join(path, f"{cid}.csv")
+        if os.path.exists(file_path):
+            fields = read_csv_flexible_encoding(file_path)
+            if fields and len(fields) >= 8:
+                client_data.append({
+                    "customer_id": cid,
+                    "email": fields[0],
+                    "Nom": f"{fields[3]} {fields[4]}",
+                    "telephone": fields[5],
+                    "adresse": fields[6],
+                    "ville": fields[7]
+                })
+            else:
+                st.warning(f"⚠️ Client {cid} ignoré : fichier vide, invalide ou mal encodé.")
+        else:
+            st.warning(f"⚠️ Fichier client {cid}.csv introuvable.")
+    return pd.DataFrame(client_data)
+
+
+
 @st.cache_data(show_spinner="Chargement des commandes depuis Shopify...")
 def get_shopify_orders():
     url = f"https://{SHOPIFY_DOMAIN}/admin/api/{API_VERSION}/orders.json?status=any&limit=250"
@@ -149,26 +209,6 @@ def extract_date_from_name(name):
         except:
             return None
     return None
-
-
-# === Précharger données globales ===
-clients_info = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Clients")
-noms_from_csv = sorted(clients_info["nom"].dropna().unique()) if "nom" in clients_info.columns else []
-
-# Ajouter les noms extraits dynamiquement via get_client_details
-orders_df = get_shopify_orders()
-client_df = clients_df.copy()
-noms_from_dynamic = sorted(client_df["nom"].dropna().unique()) if not client_df.empty else []
-
-# Fusion sans doublons
-noms_clients = sorted(set(noms_from_csv + noms_from_dynamic))
-
-sources = ["web", "non web"]
-
-plats_disponibles = []
-if os.path.exists("commandes.csv"):
-    plats_disponibles = sorted(pd.read_csv("commandes.csv")["Plat"].dropna().unique())
-
 
 # === Interface principale ===
 if not os.path.exists("produits_prices.csv"):
@@ -217,41 +257,25 @@ with tabs[0]:
             (orders_df["date_livraison"] >= start_week)
         ]
 
-        orders_df["customer_id"] = pd.to_numeric(orders_df["customer_id"], errors="coerce").astype("Int64")
-        client_df["customer_id"] = pd.to_numeric(client_df["customer_id"], errors="coerce").astype("Int64")
-
-
-        # Fusionner avec les infos clients
-        full_df = orders_df.merge(client_df, on="customer_id", how="left")
-
-        # ✅ Sauvegarder les infos enrichies dans commandes.csv
-        save_df = full_df[["order_number", "Plat", "customer_id", "nom", "quantity", "source_name", "note"]]
+        # ✅ Sauvegarder toutes les commandes récupérées dans commandes.csv
+        save_df = orders_df[["order_number", "Plat", "customer_id", "quantity", "source_name", "note"]]
         save_df.to_csv("commandes.csv", index=False, quoting=csv.QUOTE_NONNUMERIC)
 
-
         # Maintenant affichage
-        client_df = clients_df.copy()
-
-
-        # 🛠 Correction : assurer que les types sont bien des int
-        orders_df["customer_id"] = pd.to_numeric(orders_df["customer_id"], errors="coerce").astype("Int64")
-        client_df["customer_id"] = pd.to_numeric(client_df["customer_id"], errors="coerce").astype("Int64")
+        client_df = pd.DataFrame()
+        if not orders_df["customer_id"].dropna().empty:
+            client_df = get_client_details(orders_df["customer_id"].dropna().unique())
 
         full_df = orders_df.merge(client_df, on="customer_id", how="left")
 
-
-        full_df = orders_df.merge(client_df, on="customer_id", how="left")
-
-
-
-        shopify_display = full_df[["order_number", "Plat", "nom", "quantity", "source_name", "note"]]
+        shopify_display = full_df[["order_number", "Plat", "Nom", "quantity", "source_name", "note"]]
         edited_shopify = st.data_editor(
             shopify_display,
             num_rows="dynamic",
             use_container_width=True,
             column_config={
                 "Plat": st.column_config.SelectboxColumn("Plat", options=plats_disponibles, required=True),
-                "nom": st.column_config.SelectboxColumn("nom", options=noms_clients, required=True),
+                "Nom": st.column_config.SelectboxColumn("Nom", options=noms_clients, required=True),
                 "source_name": st.column_config.SelectboxColumn("Source", options=sources)
             }
         )
@@ -260,15 +284,18 @@ with tabs[0]:
             edited_shopify.to_csv("commandes.csv", index=False, quoting=csv.QUOTE_NONNUMERIC)
             st.success("Commandes Shopify sauvegardées.")
 
+edited_shopify.to_csv("commandes.csv", index=False, quoting=csv.QUOTE_NONNUMERIC)
+st.success("Commandes Shopify sauvegardées.")
+
 
 # === Ajouter des commandes manuellement ===
 with tabs[1]:
     st.header("🔹 Ajouter des commandes manuellement")
-    colonnes = ["order_number", "Plat", "nom", "quantity", "source_name", "note"]
+    colonnes = ["order_number", "Plat", "Nom", "quantity", "source_name", "note"]
     if os.path.exists("commandes_additionnelles.csv"):
         initial_df = pd.read_csv("commandes_additionnelles.csv")
     else:
-        initial_df = pd.DataFrame(columns=["Plat", "nom", "quantity", "source_name", "note"])
+        initial_df = pd.DataFrame(columns=["Plat", "Nom", "quantity", "source_name", "note"])
     # st.success("Initial DF")
     # st.success(initial_df)
     edited_new = st.data_editor(
@@ -277,7 +304,7 @@ with tabs[1]:
         use_container_width=True,
         column_config={
             "Plat": st.column_config.SelectboxColumn("Plat", options=plats_disponibles, required=True),
-            "nom": st.column_config.SelectboxColumn("nom", options=noms_clients, required=True),
+            "Nom": st.column_config.SelectboxColumn("Nom", options=noms_clients, required=True),
             "source_name": st.column_config.SelectboxColumn("Source", options=sources)
         }
     )
@@ -320,60 +347,15 @@ with tabs[1]:
 
 with tabs[2]:
     st.header("👥 Informations clients")
-    colonnes_clients = ["customer_id", "nom", "email", "telephone", "adresse", "ville", "Itinéraire"]
-
+    colonnes_clients = ["Nom", "email", "telephone", "adresse", "ville", "Itinéraire"]
 
     # 🔥 Initialisation : charger dans st.session_state
     if "clients_df" not in st.session_state:
-        sheet_id = "1YLWvm-ay-vgPP2rIDQNplrRKUciyGzudWPgO2fVAC_I"
-        sheet_name = "Clients"
-        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
-
-        try:
-            from_gsheet = pd.read_csv(url)
-            from_gsheet.columns = [col.lower() for col in from_gsheet.columns]
-        except Exception as e:
-            st.warning(f"❌ Erreur chargement Google Sheet : {e}")
-            from_gsheet = pd.DataFrame()
-
-        from_csv = pd.read_csv("Clients.csv", dtype={"customer_id": "string"}) if os.path.exists("Clients.csv") else pd.DataFrame()
-        from_csv.columns = [col.lower() for col in from_csv.columns]
-
-        # 🛠 Merge les colonnes prénom + nom si présentes
-        def build_nom_complet(df):
-            if "prénom" in df.columns and "nom" in df.columns:
-                df["nom"] = df["prénom"].fillna("") + " " + df["nom"].fillna("")
-                df["nom"] = df["nom"].str.strip()
-            return df.drop(columns=["prénom"], errors="ignore")
-
-        from_gsheet = build_nom_complet(from_gsheet)
-        from_csv = build_nom_complet(from_csv)
-
-        # 🆕 Récupérer clients actifs des commandes
-        orders_df = pd.read_csv("commandes.csv") if os.path.exists("commandes.csv") else pd.DataFrame()
-        customer_ids = orders_df["customer_id"].dropna().unique() if "customer_id" in orders_df.columns else []
-        from_orders = clients_df[clients_df["customer_id"].isin(customer_ids)] if "customer_id" in clients_df.columns else pd.DataFrame()
-        from_orders.columns = [col.lower() for col in from_orders.columns]
-        from_orders = build_nom_complet(from_orders)
-
-        # Fusion complète
-        initial_clients_df = pd.concat([from_gsheet, from_csv, from_orders], ignore_index=True)
-
-        # Normaliser et forcer customer_id à string
-        initial_clients_df["customer_id"] = initial_clients_df["customer_id"].astype(str).str.strip()
-        initial_clients_df["customer_id"] = initial_clients_df["customer_id"].replace({"": None, "nan": None})
-
-
-        # Supprimer les colonnes en double (_x/_y)
-        initial_clients_df = initial_clients_df.loc[:, ~initial_clients_df.columns.duplicated()]
-
-        # Supprimer doublons sur nom
-        initial_clients_df.sort_values(by="nom", na_position="last", inplace=True)
-        initial_clients_df = initial_clients_df.drop_duplicates(subset="nom", keep="first")
-
+        from_path = load_all_clients(CUSTOMER_PATH)
+        from_csv = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame(columns=colonnes_clients)
+        initial_clients_df = pd.concat([from_csv, from_path], ignore_index=True)
+        initial_clients_df = initial_clients_df.drop_duplicates(subset="Nom", keep="last")
         st.session_state["clients_df"] = initial_clients_df
-
-
 
     # 🔥 Edition en live
     edited_clients = st.data_editor(
@@ -381,12 +363,10 @@ with tabs[2]:
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "nom": st.column_config.TextColumn("nom", required=True),
-            "Itinéraire": st.column_config.SelectboxColumn("Itinéraire", options=[str(i) for i in range(1, 6)]),
-            "customer_id": st.column_config.TextColumn("customer_id", disabled=True)
+            "Nom": st.column_config.TextColumn("Nom", required=True),
+            "Itinéraire": st.column_config.SelectboxColumn("Itinéraire", options=[str(i) for i in range(1, 6)])
         }
     )
-
 
     # 🔥 Stockage de l'édition en session_state pour garder en mémoire
     st.session_state["clients_df"] = edited_clients
@@ -407,18 +387,9 @@ with tabs[3]:
     df_all = pd.concat([df1, df2], ignore_index=True)
 
     clients_info = pd.read_csv("Clients.csv") if os.path.exists("Clients.csv") else pd.DataFrame()
-    clients_info.columns = [col.lower() for col in clients_info.columns]
-
-    if "prénom" in clients_info.columns and "nom" in clients_info.columns:
-        clients_info["nom"] = clients_info["prénom"].fillna("") + " " + clients_info["nom"].fillna("")
-        clients_info["nom"] = clients_info["nom"].str.strip()
-        clients_info.drop(columns=["prénom"], inplace=True)
-
-
-
     produits_prices = pd.read_csv("produits_prices.csv") if os.path.exists("produits_prices.csv") else pd.DataFrame()
 
-    final_df = df_all.merge(clients_info, on="nom", how="left")
+    final_df = df_all.merge(clients_info, on="Nom", how="left")
 
     # Supprimer colonnes inutiles
     final_df.drop(columns=[col for col in final_df.columns if col.lower().startswith("unnamed") or col == "customer_id"], inplace=True, errors="ignore")
@@ -448,7 +419,7 @@ with tabs[3]:
     final_df["total"] = final_df["price"] * final_df["quantity"].fillna(0)
 
     # Réorganiser les colonnes
-    final_order = ["order_number", "nom", "Plat", "quantity", "price", "total", "source_name", "note", "Itinéraire", "email", "telephone", "adresse", "ville"]
+    final_order = ["order_number", "Nom", "Plat", "quantity", "price", "total", "source_name", "note", "Itinéraire", "email", "telephone", "adresse", "ville"]
     final_df = final_df[[col for col in final_order if col in final_df.columns]]
 
     st.dataframe(final_df, use_container_width=True)
@@ -473,14 +444,14 @@ with tabs[4]:
     df_all["quantity"] = pd.to_numeric(df_all["quantity"], errors="coerce").fillna(0)
 
     pivot_df = df_all.pivot_table(
-        index=["order_number", "nom", "source_name", "note"],
+        index=["order_number", "Nom", "source_name", "note"],
         columns="Plat",
         values="quantity",
         aggfunc="sum",
         fill_value=0
     ).reset_index()
 
-    pivot_df["Total commandes"] = pivot_df.drop(columns=["order_number", "nom", "source_name", "note"]).sum(axis=1)
+    pivot_df["Total commandes"] = pivot_df.drop(columns=["order_number", "Nom", "source_name", "note"]).sum(axis=1)
 
     st.dataframe(pivot_df, use_container_width=True)
 
@@ -501,21 +472,21 @@ with tabs[5]:
     df_all["quantity"] = pd.to_numeric(df_all["quantity"], errors="coerce").fillna(0)
 
     pivot_edit = df_all.pivot_table(
-        index=["order_number", "nom", "source_name", "note"],
+        index=["order_number", "Nom", "source_name", "note"],
         columns="Plat",
         values="quantity",
         aggfunc="sum",
         fill_value=0
     ).reset_index()
 
-    plats = [col for col in pivot_edit.columns if col not in ["order_number", "nom", "source_name", "note"]]
+    plats = [col for col in pivot_edit.columns if col not in ["order_number", "Nom", "source_name", "note"]]
 
     edited_pivot = st.data_editor(
         pivot_edit,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "nom": st.column_config.SelectboxColumn("nom", options=noms_clients, required=True),
+            "Nom": st.column_config.SelectboxColumn("Nom", options=noms_clients, required=True),
             "source_name": st.column_config.SelectboxColumn("Source", options=sources, required=True),
             **{plat: st.column_config.NumberColumn(plat, min_value=0, step=1) for plat in plats}
         }
@@ -530,7 +501,7 @@ with tabs[5]:
                 if qty > 0:
                     lines.append({
                         "order_number": row.get("order_number", None),
-                        "nom": row["nom"],
+                        "Nom": row["Nom"],
                         "Plat": plat,
                         "quantity": qty,
                         "source_name": row["source_name"],
