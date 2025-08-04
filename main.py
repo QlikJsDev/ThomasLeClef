@@ -120,8 +120,14 @@ def get_products_and_prices():
 def load_all_clients(sheet_url, csv_path="Clients.csv"):
     # Configurer l'API Google Sheets
     scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds = service_account.Credentials.from_service_account_file("spherical-treat-230621-e55884a341df.json", scopes=scopes)
+    # Récupérer le bloc
+    sa_info = st.secrets["google_service_account"]
+    # Charger les credentials directement à partir du dictionnaire
+    creds = service_account.Credentials.from_service_account_info(sa_info, scopes=scopes)
+    # creds = service_account.Credentials.from_service_account_file("file", scopes=scopes)
     service = build('sheets', 'v4', credentials=creds)
+
+    
 
     # Extraire l'ID de la feuille
     sheet_id = sheet_url.split("/d/")[1].split("/")[0]
